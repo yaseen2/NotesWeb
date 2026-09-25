@@ -37,17 +37,6 @@ export function ReadingProvider({ children }) {
     return localStorage.getItem('notesweb_column_mode') || 'two-column';
   });
 
-  // View Mode: 'pdf' (Exact Compiled PDF) | 'a4' (Calibrated HTML A4 Sheet) | 'continuous'
-  const [viewMode, setViewModeState] = useState(() => {
-    return localStorage.getItem('notesweb_view_mode') || 'pdf';
-  });
-
-  const setViewMode = useCallback((mode) => {
-    setViewModeState(mode);
-    try {
-      localStorage.setItem('notesweb_view_mode', mode);
-    } catch (e) {}
-  }, []);
 
   // Work Mode: 'read' | 'edit'
   const [workMode, setWorkMode] = useState('read');
@@ -178,12 +167,6 @@ export function ReadingProvider({ children }) {
 
         const parsed = parseLatexNotes(result.shortNotesRaw, conns);
         setShortNotesData(parsed);
-
-        if (result.pdfPath) {
-          setViewMode('pdf');
-        } else {
-          setViewMode('a4');
-        }
 
         if (window.location.hash) {
           const anchorFromHash = window.location.hash.replace(/^#/, '');
@@ -425,8 +408,6 @@ export function ReadingProvider({ children }) {
         columnMode,
         setColumnMode,
         toggleColumnMode,
-        viewMode,
-        setViewMode,
         workMode,
         setWorkMode,
         activeSubjectId,

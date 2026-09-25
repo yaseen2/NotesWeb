@@ -31,102 +31,6 @@
   --desk-bg: #0b1120;
 }
 
-/* Floating Control Bar above A4 Sheets */
-.a4-floating-toolbar {
-  position: sticky;
-  top: 10px;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  padding: 0.35rem 0.85rem;
-  border-radius: 9999px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  margin-bottom: 1.5rem;
-  font-family: var(--font-ui);
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-}
-
-.a4-toolbar-badge {
-  font-weight: 600;
-  color: var(--text-main);
-  background: var(--bg-muted);
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.a4-toolbar-divider {
-  width: 1px;
-  height: 16px;
-  background-color: var(--border-subtle);
-}
-
-.a4-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  padding: 0.25rem 0.55rem;
-  cursor: pointer;
-  font-size: 0.76rem;
-  font-weight: 500;
-  transition: all var(--transition-fast);
-}
-
-.a4-toolbar-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-main);
-  border-color: var(--border-strong);
-}
-
-.a4-toolbar-btn.active {
-  background: var(--accent-primary);
-  color: #ffffff;
-  border-color: var(--accent-primary);
-}
-
-.a4-zoom-group {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.a4-zoom-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: var(--bg-muted);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-main);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.a4-zoom-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-}
-
-.a4-zoom-label {
-  font-size: 0.74rem;
-  font-weight: 600;
-  min-width: 42px;
-  text-align: center;
-  color: var(--text-main);
-}
 
 /* Container scaling for Zoom */
 .a4-zoom-container {
@@ -388,7 +292,6 @@
   .app-header,
   .vault-sidebar,
   .context-drawer,
-  .a4-floating-toolbar,
   .search-backdrop,
   .modal-overlay,
   .window-drag-overlay {
@@ -439,11 +342,6 @@
     column-count: 1 !important;
     height: auto !important;
     overflow: visible !important;
-  }
-  .a4-floating-toolbar {
-    flex-wrap: wrap;
-    justify-content: center;
-    border-radius: var(--radius-md);
   }
 }
 

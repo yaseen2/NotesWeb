@@ -1,9 +1,8 @@
 // src/components/reader/ShortNotesViewer.jsx - Universal Short Notes Reader
-// Automatically routes to Authentic PDF Viewer (when PDF attached) or High-Precision A4 LaTeX Reader
+// Directly renders Authentic PDF Viewer (when PDF attached) or Clean LaTeX Document
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useReading } from '../../context/ReadingContext';
-import { paginateIntoA4Pages } from '../../utils/a4Paginator';
 import PdfNotesViewer from './PdfNotesViewer';
 import { addCustomChapter, addCustomSubject, getVaultSubjects } from '../../utils/vaultManager';
 import {
@@ -14,10 +13,6 @@ import {
   UploadCloud,
   Plus,
   Sparkles,
-  Printer,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
   BookOpen,
   Layers,
   Compass,
@@ -32,8 +27,6 @@ export default function ShortNotesViewer() {
     currentPdfPath,
     contentLoading,
     isUpcoming,
-    viewMode,
-    setViewMode,
     activeSubjectId,
     setActiveSubjectId,
     activeChapterId,
@@ -43,13 +36,7 @@ export default function ShortNotesViewer() {
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [zoomPercent, setZoomPercent] = useState(100);
   const fileInputRef = useRef(null);
-
-  // Intelligently paginate short notes into discrete A4 two-column pages for HTML mode
-  const a4Pages = useMemo(() => {
-    return paginateIntoA4Pages(shortNotesData);
-  }, [shortNotesData]);
 
   // Handle concept clicks via event delegation
   const handleContainerClick = (e) => {
@@ -66,10 +53,6 @@ export default function ShortNotesViewer() {
       openConcept(conceptId, targetSection, e);
     }
   };
-
-  const handleZoomIn = () => setZoomPercent((prev) => Math.min(150, prev + 10));
-  const handleZoomOut = () => setZoomPercent((prev) => Math.max(60, prev - 10));
-  const handleZoomReset = () => setZoomPercent(100);
 
   // Handle direct PDF drop on the workspace canvas
   const handlePdfDrop = (e) => {
@@ -100,27 +83,24 @@ export default function ShortNotesViewer() {
     let subjects = getVaultSubjects();
     let targetSubjectId = activeSubjectId;
 
-    if (!targetSubjectId || subjects.length === 0) {
-      const newSub = addCustomSubject({
-        title: 'Uploaded Notes',
-        code: 'PDF',
-        description: 'User study collection',
-      });
-      targetSubjectId = newSub.id;
+    if (!targetSubjectId || !subjects.some((s) => s.id === targetSubjectId)) {
+      if (subjects.length > 0) {
+        targetSubjectId = subjects[0].id;
+      } else {
+        const newSub = addCustomSubject('Imported Notes');
+        targetSubjectId = newSub.id;
+      }
     }
 
-    const res = addCustomChapter(targetSubjectId, {
+    const newChapter = addCustomChapter(targetSubjectId, {
       title: cleanTitle,
-      subtitle: 'Original PDF Note',
-      period: '',
+      shortNotes: `% ${cleanTitle} LaTeX Short Notes\n\\section{1}{Overview}\nDrop in contextual notes or connect concepts.`,
+      longNotes: `# ${cleanTitle}\n\nContextual analysis and detailed reference background.`,
       pdfPath: objectUrl,
-      pdfFile: file,
-      shortNotesRaw: '',
-      longNotesRaw: '',
     });
 
-    setActiveSubjectId(res.subject.id);
-    setActiveChapterId(res.chapter.id);
+    setActiveSubjectId(targetSubjectId);
+    setActiveChapterId(newChapter.id);
   };
 
   // 1. Loading State
@@ -145,13 +125,13 @@ export default function ShortNotesViewer() {
     );
   }
 
-  // 3. Exact PDF View: If a PDF is attached and viewMode is 'pdf'
-  if (currentPdfPath && viewMode === 'pdf') {
+  // 3. Authentic PDF View: If a PDF is attached, render high-performance PDF.js reader
+  if (currentPdfPath) {
     return <PdfNotesViewer pdfUrl={currentPdfPath} />;
   }
 
   // Helper to render subsection elements with grouped lists, tables, and quotes
-  const renderSubElements = (elements, isA4 = true) => {
+  const renderSubElements = (elements) => {
     if (!elements || elements.length === 0) return null;
     const rendered = [];
     let currentBulletList = [];
@@ -160,7 +140,7 @@ export default function ShortNotesViewer() {
     const flushLists = (keyPrefix) => {
       if (currentBulletList.length > 0) {
         rendered.push(
-          <ul key={`ul-${keyPrefix}`} className={isA4 ? "a4-item-list" : "latex-item-list"}>
+          <ul key={`ul-${keyPrefix}`} className="latex-item-list">
             {currentBulletList}
           </ul>
         );
@@ -168,7 +148,7 @@ export default function ShortNotesViewer() {
       }
       if (currentNumberedList.length > 0) {
         rendered.push(
-          <ol key={`ol-${keyPrefix}`} className={isA4 ? "a4-enumerate-list" : "latex-enumerate-list"}>
+          <ol key={`ol-${keyPrefix}`} className="latex-enumerate-list">
             {currentNumberedList}
           </ol>
         );
@@ -194,7 +174,7 @@ export default function ShortNotesViewer() {
           rendered.push(
             <div
               key={`tbl-${idx}`}
-              className={isA4 ? "a4-table-wrapper" : "latex-table-wrapper"}
+              className="latex-table-wrapper"
               dangerouslySetInnerHTML={{ __html: el.content }}
             />
           );
@@ -202,13 +182,13 @@ export default function ShortNotesViewer() {
           rendered.push(
             <blockquote
               key={`quote-${idx}`}
-              className={isA4 ? "a4-quote" : "latex-quote"}
+              className="latex-quote"
               dangerouslySetInnerHTML={{ __html: el.content }}
             />
           );
         } else if (el.type === 'subsubsection') {
           rendered.push(
-            <h4 key={`h4-${idx}`} className={isA4 ? "a4-subsubsection-title" : "latex-subsubsection-title"}>
+            <h4 key={`h4-${idx}`} className="latex-subsubsection-title">
               {el.content}
             </h4>
           );
@@ -216,7 +196,7 @@ export default function ShortNotesViewer() {
           rendered.push(
             <p
               key={`p-${idx}`}
-              className={isA4 ? "a4-paragraph" : "latex-paragraph"}
+              className="latex-paragraph"
               dangerouslySetInnerHTML={{ __html: el.content }}
             />
           );
@@ -229,11 +209,11 @@ export default function ShortNotesViewer() {
   };
 
   // Helper to render a section block
-  const renderSection = (section, secIdx = 0, isA4 = true) => (
-    <section key={`${section.id || section.number}-${secIdx}`} className={isA4 ? "a4-section" : "latex-section"} id={section.id}>
+  const renderSection = (section, secIdx = 0) => (
+    <section key={`${section.id || section.number}-${secIdx}`} className="latex-section" id={section.id}>
       {!section.isContinuation && (
-        <h2 className={isA4 ? "a4-section-title" : "latex-section-title"}>
-          <span className={isA4 ? "a4-section-number" : "latex-section-number"}>{section.number}</span>
+        <h2 className="latex-section-title">
+          <span className="latex-section-number">{section.number}</span>
           <span>{section.title}</span>
         </h2>
       )}
@@ -252,164 +232,35 @@ export default function ShortNotesViewer() {
       )}
 
       {section.subsections && section.subsections.map((sub, sIdx) => (
-        <div key={sIdx} className={isA4 ? "a4-subsection" : "latex-subsection"}>
+        <div key={sIdx} className="latex-subsection">
           {sub.title && (
-            <h3 className={isA4 ? "a4-subsection-title" : "latex-subsection-title"}>
-              {sub.number && <span className={isA4 ? "a4-sub-number" : "latex-sub-number"}>{sub.number} </span>}
+            <h3 className="latex-subsection-title">
+              {sub.number && <span className="latex-sub-number">{sub.number} </span>}
               <span>{sub.title}</span>
             </h3>
           )}
-          {renderSubElements(sub.elements, isA4)}
+          {renderSubElements(sub.elements)}
         </div>
       ))}
     </section>
   );
 
-  // 4. If shortNotesData is available (LaTeX compiled view)
+  // 4. If shortNotesData is available without PDF (Clean LaTeX Document View)
   if (shortNotesData && shortNotesData.sections && shortNotesData.sections.length > 0) {
     return (
-      <div className="a4-desk-canvas" onClick={handleContainerClick}>
-        {/* Floating Desk Toolbar */}
-        <div className="a4-floating-toolbar">
-          <div className="a4-toolbar-badge" title="LaTeX Document Class: article (10pt, a4paper, twocolumn, margin=0.5in)">
-            <FileText size={13} />
-            <span>A4 Twocolumn (10pt • 0.5in margin)</span>
-          </div>
-
-          <span className="a4-toolbar-badge">
-            {a4Pages.length} {a4Pages.length === 1 ? 'Page' : 'Pages'}
-          </span>
-
-          <div className="a4-toolbar-divider" />
-
-          {currentPdfPath && (
-            <button
-              className={`a4-toolbar-btn ${viewMode === 'pdf' ? 'active' : ''}`}
-              onClick={() => setViewMode('pdf')}
-              title="Exact 100% Compiled LaTeX PDF"
-            >
-              <FileCheck size={13} />
-              <span>Exact PDF</span>
-            </button>
-          )}
-
-          <button
-            className={`a4-toolbar-btn ${viewMode === 'a4' || !currentPdfPath ? 'active' : ''}`}
-            onClick={() => setViewMode('a4')}
-            title="Render as calibrated HTML A4 sheets"
-          >
-            <FileText size={13} />
-            <span>Web (A4)</span>
-          </button>
-
-          <button
-            className={`a4-toolbar-btn ${viewMode === 'continuous' ? 'active' : ''}`}
-            onClick={() => setViewMode('continuous')}
-            title="Switch to continuous scrolling view"
-          >
-            <BookOpen size={13} />
-            <span>Continuous</span>
-          </button>
-
-          <div className="a4-toolbar-divider" />
-
-          {/* Zoom Controls */}
-          <div className="a4-zoom-group">
-            <button
-              className="a4-zoom-btn"
-              onClick={handleZoomOut}
-              title="Zoom Out"
-              disabled={zoomPercent <= 60}
-            >
-              <ZoomOut size={12} />
-            </button>
-            <span className="a4-zoom-label">{zoomPercent}%</span>
-            <button
-              className="a4-zoom-btn"
-              onClick={handleZoomIn}
-              title="Zoom In"
-              disabled={zoomPercent >= 150}
-            >
-              <ZoomIn size={12} />
-            </button>
-            {zoomPercent !== 100 && (
-              <button
-                className="a4-zoom-btn"
-                onClick={handleZoomReset}
-                title="Reset Zoom to 100%"
-              >
-                <RotateCcw size={11} />
-              </button>
+      <div className="latex-desk-canvas" onClick={handleContainerClick}>
+        <article className="latex-document" aria-label="LaTeX Short Revision Notes">
+          <header className="latex-title-header">
+            <h1 className="latex-main-title">{shortNotesData.title}</h1>
+            {shortNotesData.subtitle && (
+              <p className="latex-subtitle">{shortNotesData.subtitle}</p>
             )}
+          </header>
+
+          <div className={`latex-body ${columnMode}`}>
+            {shortNotesData.sections.map((section, sIdx) => renderSection(section, sIdx))}
           </div>
-
-          <div className="a4-toolbar-divider" />
-
-          <button
-            className="a4-toolbar-btn"
-            onClick={() => window.print()}
-            title="Print or Save as exact A4 PDF (Ctrl+P)"
-          >
-            <Printer size={13} />
-            <span>Print / PDF</span>
-          </button>
-        </div>
-
-        {/* Content Render */}
-        {viewMode !== 'continuous' ? (
-          <div
-            className="a4-zoom-container"
-            style={{
-              transform: zoomPercent !== 100 ? `scale(${zoomPercent / 100})` : 'none',
-            }}
-          >
-            {a4Pages.map((page, pIdx) => (
-              <article
-                key={page.pageNumber || pIdx}
-                className="a4-page-sheet"
-                data-page-number={page.pageNumber}
-                aria-label={`A4 Page ${page.pageNumber}`}
-              >
-                <div className="a4-page-inner">
-                  {page.isFirstPage && (
-                    <header className="a4-title-header">
-                      <h1 className="a4-main-title">{page.title}</h1>
-                      {page.subtitle && <p className="a4-subtitle">{page.subtitle}</p>}
-                    </header>
-                  )}
-
-                  <div className={`a4-columns-body ${columnMode}`}>
-                    {page.sections.map((section, sIdx) => renderSection(section, sIdx, true))}
-                  </div>
-                </div>
-
-                <footer className="a4-page-footer">
-                  <span className="a4-page-number">{page.pageNumber}</span>
-                </footer>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <article
-            className="latex-document"
-            style={{
-              transform: zoomPercent !== 100 ? `scale(${zoomPercent / 100})` : 'none',
-              transformOrigin: 'top center',
-            }}
-            aria-label="LaTeX Short Revision Notes"
-          >
-            <header className="latex-title-header">
-              <h1 className="latex-main-title">{shortNotesData.title}</h1>
-              {shortNotesData.subtitle && (
-                <p className="latex-subtitle">{shortNotesData.subtitle}</p>
-              )}
-            </header>
-
-            <div className={`latex-body ${columnMode}`}>
-              {shortNotesData.sections.map((section, sIdx) => renderSection(section, sIdx, false))}
-            </div>
-          </article>
-        )}
+        </article>
       </div>
     );
   }

@@ -46,8 +46,6 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
     activeChapterId,
     setActiveChapterId,
     resetToZero,
-    viewMode,
-    setViewMode,
   } = useReading();
 
   const hoverIntentTimer = useRef(null);
@@ -337,7 +335,7 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
 
     const targetUrl = pdfUrl;
     if (!targetUrl) {
-      if (setViewMode) setViewMode('a4');
+      setLoading(false);
       return;
     }
 
