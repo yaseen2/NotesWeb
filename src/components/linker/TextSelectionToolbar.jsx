@@ -295,16 +295,24 @@ export default function TextSelectionToolbar() {
     window.getSelection()?.removeAllRanges();
   };
 
-  // Calculate dynamic style when in note editor mode
-  let finalTop = position.top;
-  let finalTransform = 'none';
+  // Calculate dynamic style
+  const toolbarStyle = {
+    position: 'fixed',
+    left: `${position.left}px`,
+    zIndex: 9999,
+  };
 
   if (isAddingNote) {
     if (position.isAbove) {
-      finalTop = Math.max(16, position.rectTop - 8);
-      finalTransform = 'translateY(-100%)';
+      toolbarStyle.bottom = `${Math.max(16, window.innerHeight - position.rectTop + 8)}px`;
     } else {
-      finalTop = Math.min(window.innerHeight - 190, position.rectBottom + 8);
+      toolbarStyle.top = `${Math.min(window.innerHeight - 190, position.rectBottom + 8)}px`;
+    }
+  } else {
+    if (position.isAbove) {
+      toolbarStyle.bottom = `${Math.max(12, window.innerHeight - position.rectTop + 8)}px`;
+    } else {
+      toolbarStyle.top = `${Math.min(window.innerHeight - 60, position.rectBottom + 8)}px`;
     }
   }
 
@@ -312,13 +320,7 @@ export default function TextSelectionToolbar() {
     <div
       ref={toolbarRef}
       className={`text-selection-toolbar ${isAddingNote ? 'is-note-mode' : 'is-pill-mode'}`}
-      style={{
-        position: 'fixed',
-        top: `${finalTop}px`,
-        left: `${position.left}px`,
-        transform: finalTransform,
-        zIndex: 9999,
-      }}
+      style={toolbarStyle}
       onClick={(e) => e.stopPropagation()}
     >
       {!isAddingNote ? (
@@ -330,6 +332,7 @@ export default function TextSelectionToolbar() {
                 key={c.id}
                 className="selection-color-dot"
                 style={{ backgroundColor: c.hex, borderColor: c.border }}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={(e) => handleApplyHighlight(c.id, e)}
                 title={`Highlight in ${c.name}`}
                 aria-label={`Highlight in ${c.name}`}
@@ -341,6 +344,7 @@ export default function TextSelectionToolbar() {
 
           <button
             className="selection-pill-btn selection-btn-comment"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handleStartAddNote}
             title={`Add personal note to "${selectedText}"`}
           >
@@ -350,6 +354,7 @@ export default function TextSelectionToolbar() {
 
           <button
             className="selection-pill-btn selection-btn-connect"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handleConnectClick}
             title={`Connect "${selectedText}" to Long Notes context`}
           >
@@ -359,6 +364,7 @@ export default function TextSelectionToolbar() {
 
           <button
             className="selection-pill-close"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handleDismiss}
             title="Dismiss (Esc)"
             aria-label="Dismiss"

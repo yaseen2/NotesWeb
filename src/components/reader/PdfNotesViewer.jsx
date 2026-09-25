@@ -70,12 +70,37 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
 
   // Edge-style popover state
   const [activePopoverTarget, setActivePopoverTarget] = useState(null);
+  const activePopoverTargetRef = useRef(null);
+  activePopoverTargetRef.current = activePopoverTarget;
+  const isPinnedRef = useRef(false);
+
   const [savedAnnotations, setSavedAnnotations] = useState(() =>
     getSavedAnnotations(activeSubjectId, activeChapterId)
   );
+  const savedAnnotationsRef = useRef(savedAnnotations);
+  savedAnnotationsRef.current = savedAnnotations;
+
   const [savedHighlights, setSavedHighlights] = useState(() =>
     getSavedHighlights(activeSubjectId, activeChapterId)
   );
+
+  // Click outside listener to dismiss popover when pinned
+  useEffect(() => {
+    if (!activePopoverTarget) return;
+
+    const handlePointerDown = (e) => {
+      if (e.target.closest('.edge-concept-popover')) return;
+      if (e.target.closest('.pdf-concept-box')) return;
+
+      clearTimeout(hoverIntentTimer.current);
+      clearTimeout(hoverGraceTimer.current);
+      isPinnedRef.current = false;
+      setActivePopoverTarget(null);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [activePopoverTarget]);
 
   useEffect(() => {
     setSavedAnnotations(getSavedAnnotations(activeSubjectId, activeChapterId));
@@ -395,7 +420,8 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
       svgLayer.style.height = `${Math.floor(viewport.height)}px`;
 
       conceptBoxes.forEach((cb) => {
-        const hasNote = Boolean(savedAnnotations[cb.conceptId]);
+        const hasNote = Boolean(savedAnnotationsRef.current?.[cb.conceptId]);
+        const createdRects = [];
 
         cb.rects.forEach((rect) => {
           const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -414,52 +440,101 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
           rectEl.setAttribute('data-concept-id', cb.conceptId);
           rectEl.setAttribute('data-target-section', cb.targetSection);
           rectEl.setAttribute('data-phrase', cb.phrase);
-          rectEl.setAttribute('title', isHighlight ? `Highlighted: "${cb.phrase}"` : `${cb.phrase} — Hover for Wikipedia preview, click for full context`);
+          rectEl.setAttribute('title', isHighlight ? `Highlighted: "${cb.phrase}"` : `${cb.phrase} — Click or hover for context`);
 
-          const triggerPopover = () => {
-            const r = rectEl.getBoundingClientRect();
-            setActivePopoverTarget({
-              conceptId: cb.conceptId,
-              targetSection: cb.targetSection,
-              phrase: cb.phrase,
-              snippet: cb.snippet || '',
-              rect: {
-                left: r.left,
-                top: r.top,
-                right: r.right,
-                bottom: r.bottom,
-                width: r.width,
-                height: r.height,
-              },
-            });
+          createdRects.push(rectEl);
+          svgLayer.appendChild(rectEl);
+        });
+
+        // Compute stable union bounding rect for all rects of this concept on this page
+        const getAnchorRect = () => {
+          let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity;
+          createdRects.forEach((el) => {
+            const b = el.getBoundingClientRect();
+            if (b.left < minLeft) minLeft = b.left;
+            if (b.top < minTop) minTop = b.top;
+            if (b.right > maxRight) maxRight = b.right;
+            if (b.bottom > maxBottom) maxBottom = b.bottom;
+          });
+          if (minLeft === Infinity) return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+          return {
+            left: minLeft,
+            top: minTop,
+            right: maxRight,
+            bottom: maxBottom,
+            width: maxRight - minLeft,
+            height: maxBottom - minTop,
           };
+        };
 
-          // 1. Direct Click (instant reveal)
+        const triggerPopover = (isClick = false) => {
+          clearTimeout(hoverIntentTimer.current);
+          clearTimeout(hoverGraceTimer.current);
+
+          if (isClick) {
+            isPinnedRef.current = true;
+          }
+
+          // If already active for this exact concept, keep it steady without re-rendering
+          if (activePopoverTargetRef.current?.conceptId === cb.conceptId) {
+            return;
+          }
+
+          const r = getAnchorRect();
+          setActivePopoverTarget({
+            conceptId: cb.conceptId,
+            targetSection: cb.targetSection,
+            phrase: cb.phrase,
+            snippet: cb.snippet || '',
+            rect: r,
+          });
+        };
+
+        createdRects.forEach((rectEl) => {
+          // 1. Direct Click (instant reveal and pinned)
           rectEl.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            clearTimeout(hoverIntentTimer.current);
-            clearTimeout(hoverGraceTimer.current);
-            triggerPopover();
+            triggerPopover(true);
           });
 
-          // 2. Wikipedia-Style Hover Intent (280ms debounced hover)
+          // 2. Debounced Hover Intent
           rectEl.addEventListener('mouseenter', () => {
             clearTimeout(hoverGraceTimer.current);
-            hoverIntentTimer.current = setTimeout(() => {
-              triggerPopover();
-            }, 280);
-          });
 
-          // 3. Grace Window on mouseleave (220ms grace window before dismiss)
-          rectEl.addEventListener('mouseleave', () => {
+            // If already open for this exact concept, do not restart timers or recreate
+            if (activePopoverTargetRef.current?.conceptId === cb.conceptId) {
+              return;
+            }
+
             clearTimeout(hoverIntentTimer.current);
-            hoverGraceTimer.current = setTimeout(() => {
-              setActivePopoverTarget(null);
-            }, 220);
+            hoverIntentTimer.current = setTimeout(() => {
+              triggerPopover(false);
+            }, 180);
           });
 
-          svgLayer.appendChild(rectEl);
+          // 3. Grace Window on mouseleave with same-concept and popover protection
+          rectEl.addEventListener('mouseleave', (e) => {
+            clearTimeout(hoverIntentTimer.current);
+
+            // If pinned by user click, stay open stably
+            if (isPinnedRef.current) return;
+
+            // If moving to another rect of the SAME concept or into the popover, don't dismiss
+            const rel = e.relatedTarget;
+            if (rel) {
+              if (rel.closest && (rel.closest(`[data-concept-id="${cb.conceptId}"]`) || rel.closest('.edge-concept-popover'))) {
+                return;
+              }
+            }
+
+            clearTimeout(hoverGraceTimer.current);
+            hoverGraceTimer.current = setTimeout(() => {
+              if (!isPinnedRef.current) {
+                setActivePopoverTarget(null);
+              }
+            }, 320);
+          });
         });
       });
 
@@ -467,7 +542,7 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
     } catch (e) {
       console.error(`Error rendering page ${pageNum}:`, e);
     }
-  }, [pdfDoc, conceptList, savedAnnotations]);
+  }, [pdfDoc, conceptList]);
 
   // Render all pages whenever pdfDoc changes
   useEffect(() => {
@@ -654,16 +729,26 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
       {activePopoverTarget && (
         <EdgeConceptPopover
           activeTarget={activePopoverTarget}
-          onClose={() => setActivePopoverTarget(null)}
+          onClose={() => {
+            isPinnedRef.current = false;
+            setActivePopoverTarget(null);
+          }}
           onMouseEnter={() => {
             clearTimeout(hoverGraceTimer.current);
           }}
           onMouseLeave={() => {
-            hoverGraceTimer.current = setTimeout(() => {
-              setActivePopoverTarget(null);
-            }, 220);
+            if (!isPinnedRef.current) {
+              clearTimeout(hoverGraceTimer.current);
+              hoverGraceTimer.current = setTimeout(() => {
+                if (!isPinnedRef.current) {
+                  setActivePopoverTarget(null);
+                }
+              }, 320);
+            }
           }}
           onOpenLongNotes={(conceptId, targetSection, evt, phrase) => {
+            isPinnedRef.current = false;
+            setActivePopoverTarget(null);
             openConcept(conceptId, targetSection, evt, phrase);
           }}
           subjectId={activeSubjectId}

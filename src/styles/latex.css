@@ -1126,21 +1126,44 @@
   border-radius: 12px;
   box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 6px 12px -4px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  animation: edgePopoverSlide 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: edgePopoverFade 0.12s ease-out;
   font-family: inherit;
   backdrop-filter: blur(8px);
+  pointer-events: auto;
 }
 
-@keyframes edgePopoverSlide {
+@keyframes edgePopoverFade {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
+
+/* Invisible hover bridge to eliminate the gap between highlight rect and popover */
+.edge-concept-popover.placement-above::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -14px;
+  height: 16px;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.edge-concept-popover.placement-below::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -14px;
+  height: 16px;
+  background: transparent;
+  pointer-events: auto;
+}
+
 
 .edge-popover-header {
   display: flex;

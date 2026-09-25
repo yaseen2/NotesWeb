@@ -70,24 +70,27 @@ export default function EdgeConceptPopover({
   if (left < 16) left = 16;
   if (left + popoverWidth > screenW - 16) left = screenW - popoverWidth - 16;
 
-  // Estimated popover height ~ 220px
-  const popoverHeight = 220;
   const spaceAbove = rect.top;
   const spaceBelow = screenH - rect.bottom;
 
   // Prefer above if enough room; otherwise below
-  const isAbove = spaceAbove >= popoverHeight + 16 || spaceAbove > spaceBelow;
+  const isAbove = spaceAbove >= 200 || spaceAbove > spaceBelow;
 
-  let top = isAbove ? rect.top - 8 : rect.bottom + 8;
-  // Clamp so it never overflows off-screen
+  const popoverStyle = {
+    position: 'fixed',
+    left: `${left}px`,
+    width: `${popoverWidth}px`,
+    zIndex: 9999,
+    display: 'flex',
+    flexDirection: 'column',
+  };
+
   if (isAbove) {
-    if (top < popoverHeight + 16) {
-      top = popoverHeight + 16;
-    }
+    popoverStyle.bottom = `${Math.max(16, screenH - rect.top + 8)}px`;
+    popoverStyle.maxHeight = `${Math.max(140, rect.top - 24)}px`;
   } else {
-    if (top + popoverHeight > screenH - 16) {
-      top = Math.max(16, screenH - popoverHeight - 16);
-    }
+    popoverStyle.top = `${Math.min(screenH - 120, rect.bottom + 8)}px`;
+    popoverStyle.maxHeight = `${Math.max(140, screenH - rect.bottom - 24)}px`;
   }
 
   const handleSaveNote = () => {
@@ -132,14 +135,7 @@ export default function EdgeConceptPopover({
     <div
       ref={popoverRef}
       className={`edge-concept-popover wikipedia-preview-card ${isAbove ? 'placement-above' : 'placement-below'}`}
-      style={{
-        position: 'fixed',
-        left: `${left}px`,
-        top: `${top}px`,
-        transform: isAbove ? 'translateY(-100%)' : 'none',
-        width: `${popoverWidth}px`,
-        zIndex: 9999,
-      }}
+      style={popoverStyle}
       onClick={(e) => e.stopPropagation()}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
