@@ -1,0 +1,115 @@
+/* src/styles/themes.css - Calibrated Reading Themes */
+
+/* Default / Paper Light Theme */
+:root, [data-theme="paper"] {
+  --bg-page: #f8fafc;
+  --bg-paper: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-muted: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  
+  --text-main: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-focus: #2563eb;
+
+  --accent-primary: #2563eb;
+  --accent-secondary: #0ea5e9;
+  --accent-highlight: #fef08a;
+
+  /* Header & Top Bar */
+  --header-bg: rgba(255, 255, 255, 0.88);
+  --header-border: rgba(226, 232, 240, 0.85);
+
+  /* Concept Tag */
+  --concept-bg: rgba(37, 99, 235, 0.08);
+  --concept-text: #1d4ed8;
+  --concept-border: rgba(37, 99, 235, 0.3);
+  --concept-hover-bg: rgba(37, 99, 235, 0.16);
+
+  /* Highlight Flash in Drawer */
+  --target-highlight-bg: rgba(254, 240, 138, 0.45);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: #f8fafc;
+}
+
+/* Warm Sepia Theme (Refined Italian editorial book tone) */
+[data-theme="sepia"] {
+  --bg-page: #fbf8f1;
+  --bg-paper: #fffdf9;
+  --bg-surface: #f7f1e5;
+  --bg-muted: #efe6d5;
+  --bg-hover: #e6dac6;
+
+  --text-main: #261f18;
+  --text-secondary: #4d3d2e;
+  --text-muted: #7d6852;
+
+  --border-subtle: #e5dac6;
+  --border-strong: #cebe9e;
+  --border-focus: #9a3412;
+
+  --accent-primary: #9a3412;
+  --accent-secondary: #b45309;
+  --accent-highlight: #fef08a;
+
+  /* Header & Top Bar */
+  --header-bg: rgba(251, 248, 241, 0.9);
+  --header-border: rgba(229, 218, 198, 0.85);
+
+  /* Concept Tag */
+  --concept-bg: rgba(154, 52, 18, 0.08);
+  --concept-text: #7c2d12;
+  --concept-border: rgba(154, 52, 18, 0.3);
+  --concept-hover-bg: rgba(154, 52, 18, 0.15);
+
+  /* Highlight Flash */
+  --target-highlight-bg: rgba(254, 240, 138, 0.5);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #cebe9e;
+  --scrollbar-track: #fbf8f1;
+}
+
+/* Midnight Dark Theme (Deep rich space slate, crisp contrast) */
+[data-theme="dark"] {
+  --bg-page: #090d16;
+  --bg-paper: #0f172a;
+  --bg-surface: #111a2e;
+  --bg-muted: #1e293b;
+  --bg-hover: #27364f;
+
+  --text-main: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-focus: #38bdf8;
+
+  --accent-primary: #38bdf8;
+  --accent-secondary: #34d399;
+  --accent-highlight: #854d0e;
+
+  /* Header & Top Bar */
+  --header-bg: rgba(9, 13, 22, 0.85);
+  --header-border: rgba(255, 255, 255, 0.08);
+
+  /* Concept Tag */
+  --concept-bg: rgba(56, 189, 248, 0.12);
+  --concept-text: #7dd3fc;
+  --concept-border: rgba(56, 189, 248, 0.35);
+  --concept-hover-bg: rgba(56, 189, 248, 0.22);
+
+  /* Highlight Flash */
+  --target-highlight-bg: rgba(56, 189, 248, 0.25);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #334155;
+  --scrollbar-track: #090d16;
+}
