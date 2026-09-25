@@ -117,6 +117,7 @@ export async function extractConceptBoundingBoxes(page, viewport, concepts) {
           phrase: match[0],
           targetSection: concept.targetSection || concept.id,
           snippet: concept.snippet || '',
+          imageUrl: concept.imageUrl || null,
           color: concept.color || null,
           isHighlight: Boolean(concept.isHighlight),
           rects: [{
@@ -213,6 +214,7 @@ export async function extractConceptBoundingBoxes(page, viewport, concepts) {
             phrase: match[0],
             targetSection: concept.targetSection || concept.id,
             snippet: concept.snippet || '',
+            imageUrl: concept.imageUrl || null,
             color: concept.color || null,
             isHighlight: Boolean(concept.isHighlight),
             rects: subRects,

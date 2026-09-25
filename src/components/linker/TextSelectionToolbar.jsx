@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useReading } from '../../context/ReadingContext';
-import { saveAnnotation } from '../../utils/annotationStorage';
+import { saveAnnotation, getSavedAnnotations, findAnnotationByConceptOrPhrase } from '../../utils/annotationStorage';
 import { addOrUpdateConnection } from '../../utils/linkManager';
 import {
   saveHighlight,
@@ -192,8 +192,10 @@ export default function TextSelectionToolbar() {
   const handleStartAddNote = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    const existingAnnotations = getSavedAnnotations(activeSubjectId, activeChapterId);
+    const found = findAnnotationByConceptOrPhrase(existingAnnotations, null, selectedText);
+    setNoteText(found?.text || '');
     setIsAddingNote(true);
-    setNoteText('');
   };
 
   const handleSaveNote = (e) => {
@@ -204,7 +206,10 @@ export default function TextSelectionToolbar() {
     const cleanNote = noteText.trim();
     if (!cleanNote) return;
 
-    const conceptId = `user_note_${Date.now()}`;
+    // Check if this phrase already has a concept or annotation
+    const existingAnnotations = getSavedAnnotations(activeSubjectId, activeChapterId);
+    const found = findAnnotationByConceptOrPhrase(existingAnnotations, null, selectedText);
+    const conceptId = found?.id || `user_note_${Date.now()}`;
 
     // 1. Save personal study comment in annotation storage
     saveAnnotation(activeSubjectId, activeChapterId, conceptId, cleanNote, selectedText);
@@ -232,7 +237,14 @@ export default function TextSelectionToolbar() {
     // 3. Trigger immediate refresh to paint SVG highlight
     refreshConnections();
 
-    // 4. Reset & dismiss
+    // 4. Dispatch event so PDF and other components update immediately
+    window.dispatchEvent(
+      new CustomEvent('notesweb-annotations-updated', {
+        detail: { subjectId: activeSubjectId, chapterId: activeChapterId },
+      })
+    );
+
+    // 5. Reset & dismiss
     setIsAddingNote(false);
     setSelectedText('');
     setPosition(null);

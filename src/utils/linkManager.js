@@ -66,16 +66,20 @@ export function extractMarkdownTargets(longNotesRaw) {
       const fullCleanTitle = headingTitle.replace(/[*_#\\]/g, '').trim();
       const slug = slugify(fullCleanTitle);
 
-      // Collect summary snippet (from inline remainder or subsequent paragraph)
+      // Collect summary snippet and optional hero imageUrl
       let snippet = inlineSnippet ? inlineSnippet.slice(0, 180) : '';
-      if (!snippet) {
-        for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
-          const nextLine = lines[j].trim();
-          if (nextLine && !nextLine.startsWith('#') && !nextLine.startsWith('---')) {
-            snippet = nextLine.replace(/[*_#\\]/g, '').slice(0, 180);
-            break;
-          }
+      let imageUrl = null;
+      for (let j = i + 1; j < Math.min(lines.length, i + 12); j++) {
+        const nextLine = lines[j].trim();
+        if (nextLine.startsWith('#')) break;
+        if (!imageUrl) {
+          const imgMatch = nextLine.match(/!\[.*?\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/i) || nextLine.match(/src=["'](https?:\/\/[^"']+|\/[^"']+)["']/i);
+          if (imgMatch) imageUrl = imgMatch[1];
         }
+        if (!snippet && nextLine && !nextLine.startsWith('---') && !nextLine.startsWith('![')) {
+          snippet = nextLine.replace(/[*_#\\]/g, '').slice(0, 180);
+        }
+        if (snippet && imageUrl) break;
       }
 
       if (cleanTitle.length >= 3 && slug) {
@@ -84,6 +88,7 @@ export function extractMarkdownTargets(longNotesRaw) {
           cleanTitle,
           slug,
           snippet,
+          imageUrl,
           keywords: new Set(extractKeywords(cleanTitle)),
         });
       }

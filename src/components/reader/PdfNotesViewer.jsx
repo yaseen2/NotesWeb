@@ -7,7 +7,7 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { useReading } from '../../context/ReadingContext';
 import { extractConceptBoundingBoxes } from '../../utils/pdfCoordinateExtractor';
-import { getSavedAnnotations } from '../../utils/annotationStorage';
+import { getSavedAnnotations, findAnnotationByConceptOrPhrase } from '../../utils/annotationStorage';
 import { getSavedHighlights } from '../../utils/highlightManager';
 import { savePdfBlob } from '../../utils/db';
 import { extractMarkdownTargets } from '../../utils/linkManager';
@@ -129,8 +129,37 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
         });
       }
     };
+
+    const handleAnnotationsUpdated = () => {
+      const annots = getSavedAnnotations(activeSubjectId, activeChapterId);
+      setSavedAnnotations(annots);
+      savedAnnotationsRef.current = annots;
+
+      if (pagesContainerRef.current) {
+        const allRects = pagesContainerRef.current.querySelectorAll('.pdf-concept-box');
+        allRects.forEach((r) => {
+          const cid = r.getAttribute('data-concept-id');
+          const phrase = r.getAttribute('data-phrase');
+          const matched = findAnnotationByConceptOrPhrase(annots, cid, phrase);
+          if (matched?.text?.trim()) {
+            r.classList.add('has-user-comment');
+            r.setAttribute('data-has-comment', 'true');
+            r.setAttribute('title', `Note: "${matched.text}" — Click or hover to view`);
+          } else {
+            r.classList.remove('has-user-comment');
+            r.removeAttribute('data-has-comment');
+            r.setAttribute('title', `${phrase} — Click or hover for context`);
+          }
+        });
+      }
+    };
+
     window.addEventListener('notesweb-highlights-updated', handleHighlightsUpdated);
-    return () => window.removeEventListener('notesweb-highlights-updated', handleHighlightsUpdated);
+    window.addEventListener('notesweb-annotations-updated', handleAnnotationsUpdated);
+    return () => {
+      window.removeEventListener('notesweb-highlights-updated', handleHighlightsUpdated);
+      window.removeEventListener('notesweb-annotations-updated', handleAnnotationsUpdated);
+    };
   }, [activeSubjectId, activeChapterId]);
 
   const containerRef = useRef(null);
@@ -194,6 +223,7 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
       }
 
       let snippet = '';
+      let imageUrl = null;
       if (markdownTargets.length > 0) {
         const match = markdownTargets.find(
           (t) =>
@@ -202,7 +232,10 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
             t.cleanTitle.toLowerCase().includes(norm) ||
             norm.includes(t.cleanTitle.toLowerCase())
         );
-        if (match && match.snippet) snippet = match.snippet;
+        if (match) {
+          if (match.snippet) snippet = match.snippet;
+          if (match.imageUrl) imageUrl = match.imageUrl;
+        }
       }
 
       // Sentence search fallback: find the sentence in Long Notes mentioning this concept
@@ -222,6 +255,7 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
         phrase: p,
         targetSection: targetSection || id || norm.replace(/\s+/g, '-'),
         snippet,
+        imageUrl,
         color,
         isHighlight,
       });
@@ -420,7 +454,8 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
       svgLayer.style.height = `${Math.floor(viewport.height)}px`;
 
       conceptBoxes.forEach((cb) => {
-        const hasNote = Boolean(savedAnnotationsRef.current?.[cb.conceptId]);
+        const matchedAnnotation = findAnnotationByConceptOrPhrase(savedAnnotationsRef.current, cb.conceptId, cb.phrase);
+        const hasNote = Boolean(matchedAnnotation?.text?.trim());
         const createdRects = [];
 
         cb.rects.forEach((rect) => {
@@ -437,10 +472,18 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
             rectEl.setAttribute('data-is-highlight', 'true');
             if (cb.color) rectEl.setAttribute('data-color', cb.color);
           }
+          if (hasNote) {
+            rectEl.setAttribute('data-has-comment', 'true');
+          }
           rectEl.setAttribute('data-concept-id', cb.conceptId);
           rectEl.setAttribute('data-target-section', cb.targetSection);
           rectEl.setAttribute('data-phrase', cb.phrase);
-          rectEl.setAttribute('title', isHighlight ? `Highlighted: "${cb.phrase}"` : `${cb.phrase} — Click or hover for context`);
+          rectEl.setAttribute(
+            'title',
+            hasNote
+              ? `Note: "${matchedAnnotation.text}" — Click or hover to view`
+              : (isHighlight ? `Highlighted: "${cb.phrase}"` : `${cb.phrase} — Click or hover for context`)
+          );
 
           createdRects.push(rectEl);
           svgLayer.appendChild(rectEl);
@@ -486,6 +529,7 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
             targetSection: cb.targetSection,
             phrase: cb.phrase,
             snippet: cb.snippet || '',
+            imageUrl: cb.imageUrl || null,
             rect: r,
           });
         };
@@ -756,15 +800,22 @@ export default function PdfNotesViewer({ pdfUrl = null, layoutMode, setLayoutMod
           savedAnnotations={savedAnnotations}
           onAnnotationsChanged={(newAnnotations) => {
             setSavedAnnotations(newAnnotations);
+            savedAnnotationsRef.current = newAnnotations;
             // Update classes on existing SVG rects across rendered pages
             if (pagesContainerRef.current) {
               const allRects = pagesContainerRef.current.querySelectorAll('.pdf-concept-box');
               allRects.forEach((r) => {
                 const cid = r.getAttribute('data-concept-id');
-                if (newAnnotations[cid]) {
+                const phrase = r.getAttribute('data-phrase');
+                const matched = findAnnotationByConceptOrPhrase(newAnnotations, cid, phrase);
+                if (matched?.text?.trim()) {
                   r.classList.add('has-user-comment');
+                  r.setAttribute('data-has-comment', 'true');
+                  r.setAttribute('title', `Note: "${matched.text}" — Click or hover to view`);
                 } else {
                   r.classList.remove('has-user-comment');
+                  r.removeAttribute('data-has-comment');
+                  r.setAttribute('title', `${phrase} — Click or hover for context`);
                 }
               });
             }

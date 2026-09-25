@@ -1,7 +1,7 @@
-// src/components/reader/EdgeConceptPopover.jsx - Edge-Style Floating Context & Comment Card
-// Provides inline quick context, personal annotations/comments, and 1-click deep linking to Long Notes.
+// src/components/reader/EdgeConceptPopover.jsx - Wikipedia-Grade Academic Concept Card & Study Notes
+// Features directional callout caret, adaptive hero banner, encyclopedic lead typography, and personal notes.
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   BookOpen,
   MessageSquare,
@@ -11,8 +11,14 @@ import {
   Trash2,
   ExternalLink,
   Edit3,
+  Bookmark,
 } from 'lucide-react';
-import { saveAnnotation, deleteAnnotation } from '../../utils/annotationStorage';
+import {
+  saveAnnotation,
+  deleteAnnotation,
+  getSavedAnnotations,
+  findAnnotationByConceptOrPhrase,
+} from '../../utils/annotationStorage';
 import { getSavedHighlights, deleteHighlight } from '../../utils/highlightManager';
 
 export default function EdgeConceptPopover({
@@ -27,38 +33,62 @@ export default function EdgeConceptPopover({
   onMouseLeave,
 }) {
   const popoverRef = useRef(null);
+  const textareaRef = useRef(null);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const conceptId = activeTarget?.conceptId;
-  const currentAnnotation = conceptId ? savedAnnotations[conceptId] : null;
+  const { phrase, rect, targetSection, imageUrl } = activeTarget || {};
+
+  const matchedAnnotation = useMemo(() => {
+    return findAnnotationByConceptOrPhrase(savedAnnotations, conceptId, phrase);
+  }, [conceptId, phrase, savedAnnotations]);
+
+  const activeAnnotationId = matchedAnnotation?.id || conceptId;
+  const currentAnnotation = matchedAnnotation;
 
   // Initialize note text from saved annotation
   useEffect(() => {
-    if (currentAnnotation) {
+    if (currentAnnotation?.text) {
       setNoteText(currentAnnotation.text);
       setIsEditingNote(false);
     } else {
       setNoteText('');
       setIsEditingNote(false);
     }
-  }, [conceptId, currentAnnotation]);
+  }, [currentAnnotation]);
 
-  // Handle ESC key to dismiss
+  // Focus textarea when editing starts
+  useEffect(() => {
+    if (isEditingNote && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isEditingNote]);
+
+  // Keyboard navigation & shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        onClose();
+        if (isEditingNote) {
+          setIsEditingNote(false);
+          setNoteText(currentAnnotation?.text || '');
+        } else {
+          onClose();
+        }
+      } else if (!isEditingNote && (e.key === 'e' || e.key === 'E')) {
+        const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+        if (!isInput) {
+          e.preventDefault();
+          setIsEditingNote(true);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, isEditingNote, currentAnnotation]);
 
-  if (!activeTarget) return null;
-
-  const { phrase, rect, targetSection } = activeTarget;
+  if (!activeTarget || !rect) return null;
 
   // Position calculation: center horizontally over rect, position above or below
   const popoverWidth = 320;
@@ -73,8 +103,20 @@ export default function EdgeConceptPopover({
   const spaceAbove = rect.top;
   const spaceBelow = screenH - rect.bottom;
 
-  // Prefer above if enough room; otherwise below
-  const isAbove = spaceAbove >= 200 || spaceAbove > spaceBelow;
+  // Prefer placing where there is ample room (>= 270px)
+  const cardComfortHeight = 270;
+  let isAbove = false;
+  if (spaceAbove >= cardComfortHeight && spaceAbove >= spaceBelow) {
+    isAbove = true;
+  } else if (spaceBelow >= cardComfortHeight) {
+    isAbove = false;
+  } else {
+    isAbove = spaceAbove >= spaceBelow;
+  }
+
+  // Calculate dynamic caret offset (aligned with word center)
+  const wordCenterX = rect.left + rect.width / 2;
+  const caretOffsetLeft = Math.max(22, Math.min(popoverWidth - 22, wordCenterX - left));
 
   const popoverStyle = {
     position: 'fixed',
@@ -83,14 +125,17 @@ export default function EdgeConceptPopover({
     zIndex: 9999,
     display: 'flex',
     flexDirection: 'column',
+    maxHeight: `${Math.min(460, Math.max(260, isAbove ? spaceAbove - 16 : spaceBelow - 16))}px`,
   };
 
   if (isAbove) {
-    popoverStyle.bottom = `${Math.max(16, screenH - rect.top + 8)}px`;
-    popoverStyle.maxHeight = `${Math.max(140, rect.top - 24)}px`;
+    popoverStyle.bottom = `${Math.max(12, screenH - rect.top + 8)}px`;
   } else {
-    popoverStyle.top = `${Math.min(screenH - 120, rect.bottom + 8)}px`;
-    popoverStyle.maxHeight = `${Math.max(140, screenH - rect.bottom - 24)}px`;
+    // If placing below, ensure the card fits comfortably without cutting off bottom actions
+    const idealTop = rect.bottom + 8;
+    const maxTop = Math.max(12, screenH - 280);
+    const resolvedTop = idealTop > maxTop ? Math.max(12, idealTop - 25) : idealTop;
+    popoverStyle.top = `${resolvedTop}px`;
   }
 
   const handleSaveNote = () => {
@@ -98,7 +143,8 @@ export default function EdgeConceptPopover({
       handleDeleteNote();
       return;
     }
-    const updated = saveAnnotation(subjectId, chapterId, conceptId, noteText);
+    const targetId = activeAnnotationId || `user_note_${Date.now()}`;
+    const updated = saveAnnotation(subjectId, chapterId, targetId, noteText, phrase);
     if (onAnnotationsChanged) onAnnotationsChanged(updated);
     setIsEditingNote(false);
     setSavedSuccess(true);
@@ -106,13 +152,19 @@ export default function EdgeConceptPopover({
   };
 
   const handleDeleteNote = () => {
-    const updated = deleteAnnotation(subjectId, chapterId, conceptId);
+    if (activeAnnotationId) {
+      deleteAnnotation(subjectId, chapterId, activeAnnotationId);
+    }
+    if (conceptId && conceptId !== activeAnnotationId) {
+      deleteAnnotation(subjectId, chapterId, conceptId);
+    }
+    const updated = getSavedAnnotations(subjectId, chapterId);
     if (onAnnotationsChanged) onAnnotationsChanged(updated);
     setNoteText('');
     setIsEditingNote(false);
   };
 
-  const existingHighlight = React.useMemo(() => {
+  const existingHighlight = useMemo(() => {
     if (!subjectId || !chapterId || !activeTarget) return null;
     const list = getSavedHighlights(subjectId, chapterId);
     return list.find(
@@ -131,6 +183,41 @@ export default function EdgeConceptPopover({
     }
   };
 
+  // Format encyclopedic summary in Wikipedia style with bold term
+  const renderEncyclopedicSnippet = () => {
+    const raw = activeTarget.snippet?.trim();
+    if (!raw) {
+      return (
+        <p className="edge-popover-desc">
+          <strong className="edge-encyclopedic-lead">{phrase}</strong> is a core concept linked directly to contextual notes and historical analysis.
+        </p>
+      );
+    }
+
+    const escaped = (phrase || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(^|\\b)(${escaped})(\\b|$)`, 'i');
+    const match = raw.match(regex);
+
+    if (match && match.index !== undefined) {
+      const before = raw.slice(0, match.index);
+      const term = match[2];
+      const after = raw.slice(match.index + match[0].length);
+      return (
+        <p className="edge-popover-desc">
+          {before}
+          <strong className="edge-encyclopedic-lead">{term}</strong>
+          {after}
+        </p>
+      );
+    }
+
+    return (
+      <p className="edge-popover-desc">
+        <strong className="edge-encyclopedic-lead">{phrase}</strong> — {raw}
+      </p>
+    );
+  };
+
   return (
     <div
       ref={popoverRef}
@@ -140,22 +227,58 @@ export default function EdgeConceptPopover({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Header */}
+      {/* Directional Callout Caret (Points directly at hovered word) */}
+      <div
+        className={`edge-popover-caret ${isAbove ? 'caret-down' : 'caret-up'}`}
+        style={{ left: `${caretOffsetLeft}px` }}
+        aria-hidden="true"
+      >
+        <svg width="18" height="9" viewBox="0 0 18 9" className="caret-svg">
+          {isAbove ? (
+            <>
+              <polygon points="0,0 9,9 18,0" className="caret-bg" />
+              <polyline points="0,0 9,9 18,0" className="caret-stroke" />
+            </>
+          ) : (
+            <>
+              <polygon points="0,9 9,0 18,9" className="caret-bg" />
+              <polyline points="0,9 9,0 18,9" className="caret-stroke" />
+            </>
+          )}
+        </svg>
+      </div>
+
+      {/* Adaptive Wikipedia Hero Banner (when image available) */}
+      {imageUrl && (
+        <div className="edge-popover-hero-banner">
+          <img
+            src={imageUrl}
+            alt={phrase}
+            className="edge-popover-hero-img"
+            loading="lazy"
+          />
+          <div className="edge-hero-overlay" />
+        </div>
+      )}
+
+      {/* Card Header */}
       <div className="edge-popover-header">
         <div className="edge-popover-title-row">
           <Sparkles size={14} className="edge-popover-icon" />
           <h4 className="edge-popover-title">{phrase}</h4>
           {existingHighlight && (
-            <span style={{
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              padding: '0.1rem 0.35rem',
-              borderRadius: '3px',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
-              letterSpacing: '0.04em'
-            }}>
+            <span
+              style={{
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                padding: '0.1rem 0.35rem',
+                borderRadius: '3px',
+                backgroundColor: 'var(--accent-primary)',
+                color: '#fff',
+                letterSpacing: '0.04em',
+              }}
+            >
               {existingHighlight.color}
             </span>
           )}
@@ -167,7 +290,13 @@ export default function EdgeConceptPopover({
               onClick={handleRemoveHighlight}
               title="Remove this highlight"
               aria-label="Remove highlight"
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.2rem', color: 'var(--text-muted)' }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '0.2rem',
+                color: 'var(--text-muted)',
+              }}
             >
               <Trash2 size={13} />
             </button>
@@ -185,25 +314,21 @@ export default function EdgeConceptPopover({
 
       {/* Body / Wikipedia-style Quick Takeaway Snippet */}
       <div className="edge-popover-body">
-        <p className="edge-popover-desc">
-          {activeTarget.snippet
-            ? activeTarget.snippet
-            : 'Core concept linked directly to contextual notes and historical analysis.'}
-        </p>
+        {renderEncyclopedicSnippet()}
 
-        {/* Edge-Style Comment & Personal Notes Section */}
+        {/* Edge-Style Comment & Personal Study Notes Section */}
         <div className="edge-comment-section">
           {currentAnnotation && !isEditingNote ? (
             <div className="edge-saved-comment-box">
               <div className="edge-comment-meta">
                 <span className="edge-comment-label">
-                  <MessageSquare size={12} /> Your Personal Note
+                  <Bookmark size={12} /> My Study Note
                 </span>
                 <div className="edge-comment-actions">
                   <button
                     className="edge-btn-icon"
                     onClick={() => setIsEditingNote(true)}
-                    title="Edit Note"
+                    title="Edit Note (E)"
                   >
                     <Edit3 size={12} />
                   </button>
@@ -218,25 +343,33 @@ export default function EdgeConceptPopover({
               </div>
               <p className="edge-comment-text">{currentAnnotation.text}</p>
             </div>
-          ) : isEditingNote || !currentAnnotation ? (
+          ) : isEditingNote ? (
             <div className="edge-comment-editor">
               <textarea
+                ref={textareaRef}
                 className="edge-comment-textarea"
-                placeholder="Add study comment, mnemonic, or exam takeaway..."
+                placeholder="Add personal note, mnemonic, or exam takeaway..."
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleSaveNote();
+                  }
+                }}
                 rows={2}
-                autoFocus={isEditingNote}
               />
               <div className="edge-comment-editor-footer">
-                {isEditingNote && (
-                  <button
-                    className="btn btn-secondary edge-btn-sm"
-                    onClick={() => setIsEditingNote(false)}
-                  >
-                    Cancel
-                  </button>
-                )}
+                <span className="edge-ctrl-hint">Ctrl+Enter to save</span>
+                <button
+                  className="btn btn-secondary edge-btn-sm"
+                  onClick={() => {
+                    setIsEditingNote(false);
+                    setNoteText(currentAnnotation?.text || '');
+                  }}
+                >
+                  Cancel
+                </button>
                 <button
                   className="btn btn-primary edge-btn-sm"
                   onClick={handleSaveNote}
@@ -247,7 +380,17 @@ export default function EdgeConceptPopover({
                 </button>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <button
+              className="edge-add-note-prompt-btn"
+              onClick={() => setIsEditingNote(true)}
+              title="Add a personal study note, mnemonic, or takeaway (E)"
+            >
+              <MessageSquare size={13} className="prompt-icon" />
+              <span>Add personal note or mnemonic...</span>
+              <span className="prompt-key-hint">E</span>
+            </button>
+          )}
 
           {savedSuccess && (
             <div className="edge-save-toast">
@@ -257,7 +400,7 @@ export default function EdgeConceptPopover({
         </div>
       </div>
 
-      {/* Footer Actions */}
+      {/* Footer Action Bar */}
       <div className="edge-popover-footer">
         <button
           className="btn btn-primary edge-action-btn"
@@ -269,9 +412,11 @@ export default function EdgeConceptPopover({
         >
           <BookOpen size={14} />
           <span>Open in Long Notes</span>
+          <span className="edge-action-kbd">Alt+2</span>
           <ExternalLink size={12} className="edge-btn-trailing" />
         </button>
       </div>
     </div>
   );
 }
+
