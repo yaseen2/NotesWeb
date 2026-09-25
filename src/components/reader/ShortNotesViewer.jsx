@@ -4,7 +4,6 @@
 import React, { useState, useRef } from 'react';
 import { useReading } from '../../context/ReadingContext';
 import PdfNotesViewer from './PdfNotesViewer';
-import { addCustomChapter, addCustomSubject, getVaultSubjects } from '../../utils/vaultManager';
 import {
   FileText,
   FileCheck,
@@ -27,14 +26,11 @@ export default function ShortNotesViewer() {
     currentPdfPath,
     contentLoading,
     isUpcoming,
-    activeSubjectId,
-    setActiveSubjectId,
-    activeChapterId,
-    setActiveChapterId,
     restoreSampleVault,
   } = useReading();
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [modalInitialFiles, setModalInitialFiles] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -54,53 +50,23 @@ export default function ShortNotesViewer() {
     }
   };
 
-  // Handle direct PDF drop on the workspace canvas
-  const handlePdfDrop = (e) => {
+  // Handle direct file drop on the empty workspace canvas
+  const handleCanvasDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      processDroppedPdf(files[0]);
+      setModalInitialFiles(Array.from(files));
+      setIsNewModalOpen(true);
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileInputChange = (e) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      processDroppedPdf(files[0]);
+      setModalInitialFiles(Array.from(files));
+      setIsNewModalOpen(true);
     }
-  };
-
-  const processDroppedPdf = (file) => {
-    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
-      alert('Please upload a valid .pdf file.');
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    const cleanTitle = file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ');
-
-    let subjects = getVaultSubjects();
-    let targetSubjectId = activeSubjectId;
-
-    if (!targetSubjectId || !subjects.some((s) => s.id === targetSubjectId)) {
-      if (subjects.length > 0) {
-        targetSubjectId = subjects[0].id;
-      } else {
-        const newSub = addCustomSubject('Imported Notes');
-        targetSubjectId = newSub.id;
-      }
-    }
-
-    const newChapter = addCustomChapter(targetSubjectId, {
-      title: cleanTitle,
-      shortNotes: `% ${cleanTitle} LaTeX Short Notes\n\\section{1}{Overview}\nDrop in contextual notes or connect concepts.`,
-      longNotes: `# ${cleanTitle}\n\nContextual analysis and detailed reference background.`,
-      pdfPath: objectUrl,
-    });
-
-    setActiveSubjectId(targetSubjectId);
-    setActiveChapterId(newChapter.id);
   };
 
   // 1. Loading State
@@ -265,7 +231,7 @@ export default function ShortNotesViewer() {
     );
   }
 
-  // 5. Empty Vault / Onboarding Screen
+  // 5. Empty Vault / Onboarding Screen (Two-Tier Ingestion Hub)
   return (
     <div
       className={`workspace-empty-canvas ${isDragOver ? 'drag-over' : ''}`}
@@ -274,25 +240,26 @@ export default function ShortNotesViewer() {
         setIsDragOver(true);
       }}
       onDragLeave={() => setIsDragOver(false)}
-      onDrop={handlePdfDrop}
+      onDrop={handleCanvasDrop}
     >
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf"
+        accept=".pdf,.tex,.latex,.md,.markdown,.txt"
+        multiple
         style={{ display: 'none' }}
-        onChange={handleFileChange}
+        onChange={handleFileInputChange}
       />
 
       <div className="workspace-hero-card">
         <div className="workspace-hero-badge">
           <Sparkles size={13} className="badge-sparkle" />
-          <span>Specialized Two-Tier Revision Platform</span>
+          <span>Two-Tier Study &amp; Revision Platform</span>
         </div>
 
         <h1 className="workspace-hero-title">Welcome to NotesWeb</h1>
         <p className="workspace-hero-subtitle">
-          Pure vector bounding-box concept linking, sub-pixel LaTeX typography, and lossless deep-linking to contextual Long Notes.
+          Connect concise <strong>Short Notes</strong> (LaTeX/PDF) with detailed <strong>Long Notes</strong> (Markdown) for deep-context revision.
         </p>
 
         <div
@@ -306,10 +273,10 @@ export default function ShortNotesViewer() {
           </div>
           <div className="dropzone-text-group">
             <span className="dropzone-primary-text">
-              Drop any <strong>.pdf</strong> file here to start reading
+              Drop both <strong>Short Notes</strong> (.pdf/.tex) and <strong>Long Notes</strong> (.md) here
             </span>
             <span className="dropzone-secondary-text">
-              or click to browse from your computer
+              or click to open the Two-Tier Ingestion Uploader
             </span>
           </div>
         </div>
@@ -317,10 +284,13 @@ export default function ShortNotesViewer() {
         <div className="workspace-hero-actions">
           <button
             className="btn btn-primary hero-btn-main"
-            onClick={() => setIsNewModalOpen(true)}
+            onClick={() => {
+              setModalInitialFiles([]);
+              setIsNewModalOpen(true);
+            }}
           >
             <Plus size={15} />
-            <span>Create Note with Context</span>
+            <span>Upload Two-Tier Note</span>
           </button>
 
           <button
@@ -339,18 +309,8 @@ export default function ShortNotesViewer() {
               <FileCheck size={16} />
             </div>
             <div className="feature-pill-content">
-              <h4>100% Authentic PDF</h4>
-              <p>Retina-rendered vector canvas preserves genuine TeX kerning &amp; layout.</p>
-            </div>
-          </div>
-
-          <div className="feature-pill-card">
-            <div className="feature-pill-icon">
-              <Layers size={16} />
-            </div>
-            <div className="feature-pill-content">
-              <h4>Dynamic Vector Highlights</h4>
-              <p>Calculates sub-pixel glyph coordinates from raw PDF stream.</p>
+              <h4>Short Notes (Mandatory)</h4>
+              <p>Authentic vector PDF or LaTeX for high-yield formula &amp; concept revision.</p>
             </div>
           </div>
 
@@ -359,14 +319,31 @@ export default function ShortNotesViewer() {
               <BookOpen size={16} />
             </div>
             <div className="feature-pill-content">
-              <h4>Zero Hardcoding</h4>
-              <p>Jaccard semantic discovery matches any academic subject dynamically.</p>
+              <h4>Long Notes (Mandatory)</h4>
+              <p>Full Markdown background for comprehensive analysis and context.</p>
+            </div>
+          </div>
+
+          <div className="feature-pill-card">
+            <div className="feature-pill-icon">
+              <Layers size={16} />
+            </div>
+            <div className="feature-pill-content">
+              <h4>Deep Concept Linking</h4>
+              <p>Instant bidirectional anchor jumps without losing your reading position.</p>
             </div>
           </div>
         </div>
       </div>
 
-      <NewNoteModal isOpen={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} />
+      <NewNoteModal
+        isOpen={isNewModalOpen}
+        onClose={() => {
+          setIsNewModalOpen(false);
+          setModalInitialFiles([]);
+        }}
+        initialFiles={modalInitialFiles}
+      />
     </div>
   );
 }
