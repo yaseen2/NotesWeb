@@ -4,6 +4,7 @@
 import React, { useState, useRef } from 'react';
 import { useReading } from '../../context/ReadingContext';
 import PdfNotesViewer from './PdfNotesViewer';
+import EdgeConceptPopover from './EdgeConceptPopover';
 import {
   FileText,
   FileCheck,
@@ -34,19 +35,98 @@ export default function ShortNotesViewer() {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Popover State
+  const [activePopoverTarget, setActivePopoverTarget] = useState(null);
+  const hoverIntentTimer = useRef(null);
+  const hoverGraceTimer = useRef(null);
+  const isPinnedRef = useRef(false);
+  const activePopoverTargetRef = useRef(null);
+
+  React.useEffect(() => {
+    activePopoverTargetRef.current = activePopoverTarget;
+  }, [activePopoverTarget]);
+
+  const triggerPopover = (triggerElement, isClick = false) => {
+    const conceptId = triggerElement.getAttribute('data-concept-id') || triggerElement.getAttribute('data-connection-id');
+    const phrase = triggerElement.textContent;
+    if (!conceptId) return;
+
+    if (isClick) {
+      isPinnedRef.current = true;
+    }
+    
+    // Only update if it's a different concept or we are pinning
+    if (activePopoverTargetRef.current?.conceptId === conceptId && !isClick) return;
+
+    setActivePopoverTarget({
+      conceptId,
+      phrase,
+      rect: triggerElement,
+    });
+  };
+
+  const clearPopoverGracefully = () => {
+    clearTimeout(hoverGraceTimer.current);
+    hoverGraceTimer.current = setTimeout(() => {
+      if (!isPinnedRef.current) {
+        setActivePopoverTarget(null);
+      }
+    }, 320);
+  };
+
   // Handle concept clicks via event delegation
   const handleContainerClick = (e) => {
+    // If clicking inside an open popover, ignore
+    if (e.target.closest('.edge-concept-popover')) return;
+
     const trigger = e.target.closest('.concept-trigger');
-    if (!trigger) return;
+    
+    // If clicking outside any trigger, close pinned popover
+    if (!trigger) {
+      if (isPinnedRef.current) {
+        isPinnedRef.current = false;
+        setActivePopoverTarget(null);
+      }
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
+
+    // Trigger popover and pin it
+    triggerPopover(trigger, true);
 
     const conceptId = trigger.getAttribute('data-concept-id') || trigger.getAttribute('data-connection-id');
     const targetSection = trigger.getAttribute('data-target-section');
 
     if (conceptId) {
       openConcept(conceptId, targetSection, e);
+    }
+  };
+
+  const handleContainerMouseOver = (e) => {
+    const trigger = e.target.closest('.concept-trigger');
+    if (!trigger) return;
+
+    clearTimeout(hoverGraceTimer.current);
+    if (activePopoverTargetRef.current?.conceptId === (trigger.getAttribute('data-concept-id') || trigger.getAttribute('data-connection-id'))) {
+      return; // Already open
+    }
+
+    clearTimeout(hoverIntentTimer.current);
+    hoverIntentTimer.current = setTimeout(() => {
+      triggerPopover(trigger, false);
+    }, 180);
+  };
+
+  const handleContainerMouseOut = (e) => {
+    const rel = e.relatedTarget;
+    if (rel && rel.closest && (rel.closest('.concept-trigger') || rel.closest('.edge-concept-popover'))) {
+      return; // Moving to another trigger or into the popover itself
+    }
+    clearTimeout(hoverIntentTimer.current);
+    if (!isPinnedRef.current) {
+      clearPopoverGracefully();
     }
   };
 
@@ -214,7 +294,12 @@ export default function ShortNotesViewer() {
   // 4. If shortNotesData is available without PDF (Clean LaTeX Document View)
   if (shortNotesData && shortNotesData.sections && shortNotesData.sections.length > 0) {
     return (
-      <div className="latex-desk-canvas" onClick={handleContainerClick}>
+      <div 
+        className="latex-desk-canvas" 
+        onClick={handleContainerClick}
+        onMouseOver={handleContainerMouseOver}
+        onMouseOut={handleContainerMouseOut}
+      >
         <article className="latex-document" aria-label="LaTeX Short Revision Notes">
           <header className="latex-title-header">
             <h1 className="latex-main-title">{shortNotesData.title}</h1>
@@ -227,6 +312,26 @@ export default function ShortNotesViewer() {
             {shortNotesData.sections.map((section, sIdx) => renderSection(section, sIdx))}
           </div>
         </article>
+
+        {activePopoverTarget && (
+          <EdgeConceptPopover
+            conceptId={activePopoverTarget.conceptId}
+            phrase={activePopoverTarget.phrase}
+            triggerRect={activePopoverTarget.rect}
+            isPinned={isPinnedRef.current}
+            onClose={() => {
+              isPinnedRef.current = false;
+              setActivePopoverTarget(null);
+            }}
+            onMouseEnter={() => clearTimeout(hoverGraceTimer.current)}
+            onMouseLeave={(e) => {
+              if (isPinnedRef.current) return;
+              const rel = e.relatedTarget;
+              if (rel && rel.closest && rel.closest('.concept-trigger')) return;
+              clearPopoverGracefully();
+            }}
+          />
+        )}
       </div>
     );
   }
