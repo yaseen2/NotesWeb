@@ -4,7 +4,7 @@
 import React, { useState, useRef } from 'react';
 import { useReading } from '../../context/ReadingContext';
 import PdfNotesViewer from './PdfNotesViewer';
-import EdgeConceptPopover from './EdgeConceptPopover';
+import { addCustomChapter, addCustomSubject, getVaultSubjects } from '../../utils/vaultManager';
 import {
   FileText,
   FileCheck,
@@ -27,74 +27,24 @@ export default function ShortNotesViewer() {
     currentPdfPath,
     contentLoading,
     isUpcoming,
+    activeSubjectId,
+    setActiveSubjectId,
+    activeChapterId,
+    setActiveChapterId,
     restoreSampleVault,
   } = useReading();
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  const [modalInitialFiles, setModalInitialFiles] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Popover State
-  const [activePopoverTarget, setActivePopoverTarget] = useState(null);
-  const hoverIntentTimer = useRef(null);
-  const hoverGraceTimer = useRef(null);
-  const isPinnedRef = useRef(false);
-  const activePopoverTargetRef = useRef(null);
-
-  React.useEffect(() => {
-    activePopoverTargetRef.current = activePopoverTarget;
-  }, [activePopoverTarget]);
-
-  const triggerPopover = (triggerElement, isClick = false) => {
-    const conceptId = triggerElement.getAttribute('data-concept-id') || triggerElement.getAttribute('data-connection-id');
-    const phrase = triggerElement.textContent;
-    if (!conceptId) return;
-
-    if (isClick) {
-      isPinnedRef.current = true;
-    }
-    
-    // Only update if it's a different concept or we are pinning
-    if (activePopoverTargetRef.current?.conceptId === conceptId && !isClick) return;
-
-    setActivePopoverTarget({
-      conceptId,
-      phrase,
-      rect: triggerElement,
-    });
-  };
-
-  const clearPopoverGracefully = () => {
-    clearTimeout(hoverGraceTimer.current);
-    hoverGraceTimer.current = setTimeout(() => {
-      if (!isPinnedRef.current) {
-        setActivePopoverTarget(null);
-      }
-    }, 320);
-  };
-
   // Handle concept clicks via event delegation
   const handleContainerClick = (e) => {
-    // If clicking inside an open popover, ignore
-    if (e.target.closest('.edge-concept-popover')) return;
-
     const trigger = e.target.closest('.concept-trigger');
-    
-    // If clicking outside any trigger, close pinned popover
-    if (!trigger) {
-      if (isPinnedRef.current) {
-        isPinnedRef.current = false;
-        setActivePopoverTarget(null);
-      }
-      return;
-    }
+    if (!trigger) return;
 
     e.preventDefault();
     e.stopPropagation();
-
-    // Trigger popover and pin it
-    triggerPopover(trigger, true);
 
     const conceptId = trigger.getAttribute('data-concept-id') || trigger.getAttribute('data-connection-id');
     const targetSection = trigger.getAttribute('data-target-section');
@@ -104,49 +54,53 @@ export default function ShortNotesViewer() {
     }
   };
 
-  const handleContainerMouseOver = (e) => {
-    const trigger = e.target.closest('.concept-trigger');
-    if (!trigger) return;
-
-    clearTimeout(hoverGraceTimer.current);
-    if (activePopoverTargetRef.current?.conceptId === (trigger.getAttribute('data-concept-id') || trigger.getAttribute('data-connection-id'))) {
-      return; // Already open
-    }
-
-    clearTimeout(hoverIntentTimer.current);
-    hoverIntentTimer.current = setTimeout(() => {
-      triggerPopover(trigger, false);
-    }, 180);
-  };
-
-  const handleContainerMouseOut = (e) => {
-    const rel = e.relatedTarget;
-    if (rel && rel.closest && (rel.closest('.concept-trigger') || rel.closest('.edge-concept-popover'))) {
-      return; // Moving to another trigger or into the popover itself
-    }
-    clearTimeout(hoverIntentTimer.current);
-    if (!isPinnedRef.current) {
-      clearPopoverGracefully();
-    }
-  };
-
-  // Handle direct file drop on the empty workspace canvas
-  const handleCanvasDrop = (e) => {
+  // Handle direct PDF drop on the workspace canvas
+  const handlePdfDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      setModalInitialFiles(Array.from(files));
-      setIsNewModalOpen(true);
+      processDroppedPdf(files[0]);
     }
   };
 
-  const handleFileInputChange = (e) => {
+  const handleFileChange = (e) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setModalInitialFiles(Array.from(files));
-      setIsNewModalOpen(true);
+      processDroppedPdf(files[0]);
     }
+  };
+
+  const processDroppedPdf = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Please upload a valid .pdf file.');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const cleanTitle = file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ');
+
+    let subjects = getVaultSubjects();
+    let targetSubjectId = activeSubjectId;
+
+    if (!targetSubjectId || !subjects.some((s) => s.id === targetSubjectId)) {
+      if (subjects.length > 0) {
+        targetSubjectId = subjects[0].id;
+      } else {
+        const newSub = addCustomSubject('Imported Notes');
+        targetSubjectId = newSub.id;
+      }
+    }
+
+    const newChapter = addCustomChapter(targetSubjectId, {
+      title: cleanTitle,
+      shortNotes: `% ${cleanTitle} LaTeX Short Notes\n\\section{1}{Overview}\nDrop in contextual notes or connect concepts.`,
+      longNotes: `# ${cleanTitle}\n\nContextual analysis and detailed reference background.`,
+      pdfPath: objectUrl,
+    });
+
+    setActiveSubjectId(targetSubjectId);
+    setActiveChapterId(newChapter.id);
   };
 
   // 1. Loading State
@@ -294,12 +248,7 @@ export default function ShortNotesViewer() {
   // 4. If shortNotesData is available without PDF (Clean LaTeX Document View)
   if (shortNotesData && shortNotesData.sections && shortNotesData.sections.length > 0) {
     return (
-      <div 
-        className="latex-desk-canvas" 
-        onClick={handleContainerClick}
-        onMouseOver={handleContainerMouseOver}
-        onMouseOut={handleContainerMouseOut}
-      >
+      <div className="latex-desk-canvas" onClick={handleContainerClick}>
         <article className="latex-document" aria-label="LaTeX Short Revision Notes">
           <header className="latex-title-header">
             <h1 className="latex-main-title">{shortNotesData.title}</h1>
@@ -312,31 +261,11 @@ export default function ShortNotesViewer() {
             {shortNotesData.sections.map((section, sIdx) => renderSection(section, sIdx))}
           </div>
         </article>
-
-        {activePopoverTarget && (
-          <EdgeConceptPopover
-            conceptId={activePopoverTarget.conceptId}
-            phrase={activePopoverTarget.phrase}
-            triggerRect={activePopoverTarget.rect}
-            isPinned={isPinnedRef.current}
-            onClose={() => {
-              isPinnedRef.current = false;
-              setActivePopoverTarget(null);
-            }}
-            onMouseEnter={() => clearTimeout(hoverGraceTimer.current)}
-            onMouseLeave={(e) => {
-              if (isPinnedRef.current) return;
-              const rel = e.relatedTarget;
-              if (rel && rel.closest && rel.closest('.concept-trigger')) return;
-              clearPopoverGracefully();
-            }}
-          />
-        )}
       </div>
     );
   }
 
-  // 5. Empty Vault / Onboarding Screen (Two-Tier Ingestion Hub)
+  // 5. Empty Vault / Onboarding Screen
   return (
     <div
       className={`workspace-empty-canvas ${isDragOver ? 'drag-over' : ''}`}
@@ -345,26 +274,25 @@ export default function ShortNotesViewer() {
         setIsDragOver(true);
       }}
       onDragLeave={() => setIsDragOver(false)}
-      onDrop={handleCanvasDrop}
+      onDrop={handlePdfDrop}
     >
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.tex,.latex,.md,.markdown,.txt"
-        multiple
+        accept=".pdf"
         style={{ display: 'none' }}
-        onChange={handleFileInputChange}
+        onChange={handleFileChange}
       />
 
       <div className="workspace-hero-card">
         <div className="workspace-hero-badge">
           <Sparkles size={13} className="badge-sparkle" />
-          <span>Two-Tier Study &amp; Revision Platform</span>
+          <span>Specialized Two-Tier Revision Platform</span>
         </div>
 
         <h1 className="workspace-hero-title">Welcome to NotesWeb</h1>
         <p className="workspace-hero-subtitle">
-          Connect concise <strong>Short Notes</strong> (LaTeX/PDF) with detailed <strong>Long Notes</strong> (Markdown) for deep-context revision.
+          Pure vector bounding-box concept linking, sub-pixel LaTeX typography, and lossless deep-linking to contextual Long Notes.
         </p>
 
         <div
@@ -378,10 +306,10 @@ export default function ShortNotesViewer() {
           </div>
           <div className="dropzone-text-group">
             <span className="dropzone-primary-text">
-              Drop both <strong>Short Notes</strong> (.pdf/.tex) and <strong>Long Notes</strong> (.md) here
+              Drop any <strong>.pdf</strong> file here to start reading
             </span>
             <span className="dropzone-secondary-text">
-              or click to open the Two-Tier Ingestion Uploader
+              or click to browse from your computer
             </span>
           </div>
         </div>
@@ -389,13 +317,10 @@ export default function ShortNotesViewer() {
         <div className="workspace-hero-actions">
           <button
             className="btn btn-primary hero-btn-main"
-            onClick={() => {
-              setModalInitialFiles([]);
-              setIsNewModalOpen(true);
-            }}
+            onClick={() => setIsNewModalOpen(true)}
           >
             <Plus size={15} />
-            <span>Upload Two-Tier Note</span>
+            <span>Create Note with Context</span>
           </button>
 
           <button
@@ -414,18 +339,8 @@ export default function ShortNotesViewer() {
               <FileCheck size={16} />
             </div>
             <div className="feature-pill-content">
-              <h4>Short Notes (Mandatory)</h4>
-              <p>Authentic vector PDF or LaTeX for high-yield formula &amp; concept revision.</p>
-            </div>
-          </div>
-
-          <div className="feature-pill-card">
-            <div className="feature-pill-icon">
-              <BookOpen size={16} />
-            </div>
-            <div className="feature-pill-content">
-              <h4>Long Notes (Mandatory)</h4>
-              <p>Full Markdown background for comprehensive analysis and context.</p>
+              <h4>100% Authentic PDF</h4>
+              <p>Retina-rendered vector canvas preserves genuine TeX kerning &amp; layout.</p>
             </div>
           </div>
 
@@ -434,21 +349,24 @@ export default function ShortNotesViewer() {
               <Layers size={16} />
             </div>
             <div className="feature-pill-content">
-              <h4>Deep Concept Linking</h4>
-              <p>Instant bidirectional anchor jumps without losing your reading position.</p>
+              <h4>Dynamic Vector Highlights</h4>
+              <p>Calculates sub-pixel glyph coordinates from raw PDF stream.</p>
+            </div>
+          </div>
+
+          <div className="feature-pill-card">
+            <div className="feature-pill-icon">
+              <BookOpen size={16} />
+            </div>
+            <div className="feature-pill-content">
+              <h4>Zero Hardcoding</h4>
+              <p>Jaccard semantic discovery matches any academic subject dynamically.</p>
             </div>
           </div>
         </div>
       </div>
 
-      <NewNoteModal
-        isOpen={isNewModalOpen}
-        onClose={() => {
-          setIsNewModalOpen(false);
-          setModalInitialFiles([]);
-        }}
-        initialFiles={modalInitialFiles}
-      />
+      <NewNoteModal isOpen={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} />
     </div>
   );
 }

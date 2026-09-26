@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+// src/components/navigation/Header.jsx - Refined, Professional Navigation Header
+
+import React from 'react';
 import { useReading } from '../../context/ReadingContext';
 import {
   BookOpen,
@@ -9,14 +11,10 @@ import {
   PanelLeft,
   PanelLeftClose,
   Edit3,
-  UploadCloud,
 } from 'lucide-react';
-import NewNoteModal from './NewNoteModal';
 
 export default function Header() {
   const {
-    activeSubjectId,
-    activeChapterId,
     theme,
     toggleTheme,
     workMode,
@@ -27,8 +25,6 @@ export default function Header() {
     vaultOpen,
     setVaultOpen,
   } = useReading();
-
-  const [isReplaceModalOpen, setIsReplaceModalOpen] = useState(false);
 
   const getThemeIcon = () => {
     if (theme === 'paper') return <Sun size={15} />;
@@ -82,18 +78,6 @@ export default function Header() {
 
       {/* Right: Refined Action Controls */}
       <div className="header-right">
-        {/* Replace / Update Documents for current note */}
-        {activeChapterId && (
-          <button
-            className="header-icon-btn"
-            onClick={() => setIsReplaceModalOpen(true)}
-            title="Replace or update Short / Long Notes documents for this chapter"
-            aria-label="Replace Note Documents"
-          >
-            <UploadCloud size={15} />
-          </button>
-        )}
-
         {/* Read / Edit Mode Switcher */}
         <button
           className={`header-icon-btn ${workMode === 'edit' ? 'active-mode' : ''}`}
@@ -128,17 +112,6 @@ export default function Header() {
           <span className={`drawer-indicator-dot ${drawerOpen ? 'open' : ''}`} />
         </button>
       </div>
-
-      {/* Edit / Replace Note Documents Modal */}
-      {isReplaceModalOpen && activeChapterId && (
-        <NewNoteModal
-          isOpen={isReplaceModalOpen}
-          onClose={() => setIsReplaceModalOpen(false)}
-          editSubjectId={activeSubjectId}
-          editChapterId={activeChapterId}
-        />
-      )}
     </header>
   );
 }
-

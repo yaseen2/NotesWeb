@@ -1,7 +1,6 @@
 // src/utils/latexParser.js - Robust In-Browser LaTeX Parser & HTML/CSS Converter with KaTeX and Tables
 
 import katex from 'katex';
-import { marked } from 'marked';
 
 /**
  * Extracts content within balanced curly braces starting from a given index
@@ -405,11 +404,6 @@ export function parseLatexNotes(rawTex, chapterConnections = []) {
 
   const activeConns = chapterConnections.length > 0 ? chapterConnections : [];
 
-  // Fallback to Markdown Short Notes parser if raw content is not LaTeX
-  if (!rawTex.includes('\\section{') && !rawTex.includes('\\documentclass')) {
-    return parseMarkdownShortNotes(rawTex, activeConns);
-  }
-
   // Extract Document Title and Subtitle using balanced brace parser
   let docTitle = 'Detailed Revision Notes';
   let docSubtitle = '';
@@ -523,134 +517,3 @@ export function parseLatexNotes(rawTex, chapterConnections = []) {
     sections,
   };
 }
-
-/**
- * Universal Markdown Short Notes Parser
- * Converts structured Markdown revision notes (#, ##, >, -, *) into clean LaTeX revision card sections
- */
-export function parseMarkdownShortNotes(rawMd, chapterConnections = []) {
-  if (!rawMd) return null;
-  const activeConns = chapterConnections.length > 0 ? chapterConnections : [];
-
-  let title = 'Revision Notes';
-  let subtitle = '';
-
-  const lines = rawMd.split('\n');
-  const sections = [];
-  let currentSection = null;
-  let currentSubsection = null;
-  let secCounter = 1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i];
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    // Check for H1 (# Title)
-    if (line.startsWith('# ')) {
-      title = line.replace(/^#\s+/, '').replace(/[*_#\\]/g, '').trim();
-      continue;
-    }
-
-    // Check for H2 (## Section Title)
-    if (line.startsWith('## ')) {
-      const secTitle = line.replace(/^##\s+/, '').replace(/[*_#\\]/g, '').trim();
-      const secSlug = secTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      currentSection = {
-        number: `${secCounter++}`,
-        id: secSlug,
-        title: secTitle,
-        takeaway: null,
-        subsections: [],
-      };
-      sections.push(currentSection);
-      currentSubsection = null;
-      continue;
-    }
-
-    // If no section created yet, create a default first section
-    if (!currentSection) {
-      currentSection = {
-        number: '1',
-        id: 'overview-summary',
-        title: 'Core Synthesis & Takeaways',
-        takeaway: null,
-        subsections: [],
-      };
-      sections.push(currentSection);
-      secCounter = 2;
-    }
-
-    // Check for H3 (### Subsection Title)
-    if (line.startsWith('### ')) {
-      const subTitle = line.replace(/^###\s+/, '').replace(/[*_#\\]/g, '').trim();
-      currentSubsection = {
-        title: subTitle,
-        number: '',
-        elements: [],
-      };
-      currentSection.subsections.push(currentSubsection);
-      continue;
-    }
-
-    // Check for Blockquote / Takeaway (> ...)
-    if (line.startsWith('>')) {
-      const quoteText = line.replace(/^>\s*/, '').trim();
-      const cleaned = quoteText.replace(/^\*\*([^*]+)\*\*[:\s]*/i, '');
-      const boxTitle = quoteText.match(/^\*\*([^*]+)\*\*/)?.[1] || 'Key Takeaway';
-      const parsedInline = marked.parseInline ? marked.parseInline(cleaned) : cleaned;
-      currentSection.takeaway = {
-        title: boxTitle,
-        color: 'blue',
-        content: `<p class="latex-paragraph">${injectConceptLinks(parsedInline, activeConns)}</p>`,
-      };
-      continue;
-    }
-
-    // Ensure we have a current subsection for elements
-    if (!currentSubsection) {
-      currentSubsection = {
-        title: '',
-        number: '',
-        elements: [],
-      };
-      currentSection.subsections.push(currentSubsection);
-    }
-
-    // Check bullet list item (- , * )
-    if (/^[-*]\s+/.test(line)) {
-      const itemContent = line.replace(/^[-*]\s+/, '');
-      const parsed = marked.parseInline ? marked.parseInline(itemContent) : itemContent;
-      currentSubsection.elements.push({
-        type: 'item',
-        content: injectConceptLinks(parsed, activeConns),
-      });
-      continue;
-    }
-
-    // Check numbered list item (1. )
-    if (/^\d+\.\s+/.test(line)) {
-      const itemContent = line.replace(/^\d+\.\s+/, '');
-      const parsed = marked.parseInline ? marked.parseInline(itemContent) : itemContent;
-      currentSubsection.elements.push({
-        type: 'numbered-item',
-        content: injectConceptLinks(parsed, activeConns),
-      });
-      continue;
-    }
-
-    // Regular paragraph
-    const parsed = marked.parseInline ? marked.parseInline(line) : line;
-    currentSubsection.elements.push({
-      type: 'paragraph',
-      content: injectConceptLinks(parsed, activeConns),
-    });
-  }
-
-  return {
-    title,
-    subtitle,
-    sections,
-  };
-}
-
